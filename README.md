@@ -19,11 +19,19 @@ And two, because doing things this way can help you learn features of the engine
 ## Self Promotion
 
 Website https://www.animerrill.com
+
 Itch.io https://animerrill.itch.io/
+
 YouTube https://www.youtube.com/c/EthanMerrillAniMerrill
+
 Twitter https://twitter.com/AniMerrill
+
 Mastodon https://www.toot.site/@animerrill
+
 DeviantART https://www.deviantart.com/animerrill
 
+
+
 YouTube Playlist for Let's Make (Coming soon!)
+
 Latest Builds on Itch.io https://animerrill.itch.io/meteoroids
