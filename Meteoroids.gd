@@ -2,6 +2,9 @@ extends Node2D
 
 # Generic object that can be drawn in Meteoroids
 class GameObject:
+	# "GameManager" which allows us to use the functions outside of the class
+	var gm : Node2D
+	
 	var pos := Vector2.ZERO # Position
 	var rot := 0.0 # Rotation
 	
@@ -14,30 +17,35 @@ class GameObject:
 	
 	var polygon := false # Flag for connecting last point to first point
 	
-	func _init()->void:
-		# Setup for "class" checks later
-		set_meta("GameObject", 0)
+	func _init(_gm : Node2D)->void:
+		gm = _gm
+	
+	func draw()->void:
+		gm.draw_object(self)
+	
+	func get_shape()->PoolVector2Array:
+		return pts[0]
 
 class Ship extends GameObject:
-	var velocity := Vector2.ZERO
-	var max_vel := Vector2(50,50)
+	var vel := Vector2.ZERO
+	var max_vel := Vector2(25,25)
 	
 	var rot_speed := PI
 	var speed := 5
 	
-	func _init()->void:
+	var spawn_bullet := false
+	
+	func _init(_gm : Node2D).(_gm)->void:
 		# TODO: Change points so rotation is centered
 		pts = [[
-			Vector2(10, 0),
-			Vector2(-10, 8),
-			Vector2(-8, 4),
-			Vector2(-8, -4),
-			Vector2(-10, -8)
+			Vector2(12, 0),
+			Vector2(-8, 8),
+			Vector2(-6, 4),
+			Vector2(-6, -4),
+			Vector2(-8, -8)
 			]]
 		
 		polygon = true
-		
-		set_meta("Ship", 0)
 	
 	func process(delta : float)->void:
 		if Input.is_action_pressed("turn_left"):
@@ -53,24 +61,55 @@ class Ship extends GameObject:
 				rot -= 2 * PI
 		
 		if Input.is_action_pressed("boost"):
-			velocity += Vector2.RIGHT.rotated(rot) * speed * delta
-		
-			if abs(velocity.x) > max_vel.x:
-				velocity.x = sign(velocity.x) * max_vel.x
-		
-			if abs(velocity.y) > max_vel.y:
-				velocity.y = sign(velocity.y) * max_vel.y
+			vel += Vector2.RIGHT.rotated(rot) * speed * delta
 		
 		if Input.is_action_just_pressed("shoot"):
-			print("shoot")
+			spawn_bullet = true
 		
-		pos += velocity
+		if abs(vel.x) > max_vel.x:
+				vel.x = sign(vel.x) * max_vel.x
+		
+		if abs(vel.y) > max_vel.y:
+			vel.y = sign(vel.y) * max_vel.y
+		
+		pos += vel
+
+class Bullet extends GameObject:
+	var vel := Vector2.RIGHT * 500
+	
+	var dur := 1.0
+	var time := 0.0
+	
+	var delete := false
+	
+	var player := true
+	
+	#var target
+	
+	func _init(_gm : Node2D).(_gm)->void:
+		pts = [[
+			Vector2(-1, -1),
+			Vector2(1, -1),
+			Vector2(1, 1),
+			Vector2(-1, 1)
+			]]
+		
+		#target = _target
+	
+	func process(delta : float)->void:
+		time += delta
+		
+		if time >= dur:
+			delete = true
+		else:
+			pos += vel * delta
 
 class PlayField extends GameObject:
 	var size := 600.0
-	var buffer := 10.0
+	var buffer := 40.0
+	var buffer_color := Color(0,0,0)
 	
-	func _init()->void:
+	func _init(_gm : Node2D).(_gm)->void:
 		pts = [[
 			Vector2(-size / 2, -size / 2),
 			Vector2(size / 2, -size /2),
@@ -79,8 +118,60 @@ class PlayField extends GameObject:
 			]]
 		
 		polygon = true
+	
+	func draw()->void:
+		var buffer_thickness := buffer * 4
+		var buffer_width := size / 2
 		
-		set_meta("PlayField", 0)
+		# Top
+		gm.draw_rect(
+			Rect2(
+				(-buffer_width - buffer_thickness) * gm.draw_scale + gm.draw_offset.x, 
+				(-buffer_thickness - buffer_width) * gm.draw_scale + gm.draw_offset.y, 
+				(size + buffer_thickness * 2) * gm.draw_scale, 
+				buffer_thickness * gm.draw_scale
+				),
+			buffer_color,
+			true
+		)
+
+		# Bottom
+		gm.draw_rect(
+			Rect2(
+				(-buffer_width - buffer_thickness) * gm.draw_scale + gm.draw_offset.x, 
+				(buffer_width) * gm.draw_scale + gm.draw_offset.y, 
+				(size + buffer_thickness * 2) * gm.draw_scale, 
+				buffer_thickness * gm.draw_scale
+				),
+			buffer_color,
+			true
+		)
+		
+		# Left
+		gm.draw_rect(
+			Rect2(
+				(-buffer_width - buffer_thickness) * gm.draw_scale + gm.draw_offset.x, 
+				(-buffer_width) * gm.draw_scale + gm.draw_offset.y, 
+				buffer_thickness * gm.draw_scale, 
+				(size) * gm.draw_scale
+				),
+			buffer_color,
+			true
+		)
+		
+		# Right
+		gm.draw_rect(
+			Rect2(
+				(buffer_width) * gm.draw_scale + gm.draw_offset.x, 
+				(-buffer_width) * gm.draw_scale + gm.draw_offset.y, 
+				buffer_thickness * gm.draw_scale, 
+				(size) * gm.draw_scale
+				),
+			buffer_color,
+			true
+		)
+		
+		.draw()
 	
 	func warp_object(obj : GameObject)->void:
 		if obj.pos.x < -(size / 2) - buffer:
@@ -93,33 +184,126 @@ class PlayField extends GameObject:
 		elif obj.pos.y > (size / 2) + buffer:
 			obj.pos.y = -(size / 2) - buffer
 
-class TestSquare extends GameObject:
-	func _init():
+class Meteor extends GameObject:
+	var vel := Vector2.ZERO
+	
+	func _init(_gm : Node2D, _pos : Vector2, _vel : Vector2).(_gm):
 		pts = [[
-			Vector2(-20, -20),
-			Vector2(20, -20),
-			Vector2(20, 20),
-			Vector2(-20, 20)
+			Vector2(-40, -40),
+			Vector2(40, -40),
+			Vector2(40, 40),
+			Vector2(-40, 40)
 			]]
 		
-		pos = Vector2(100, 0)
-
-class Level:
-	enum {PLAYFIELD, SHIP, SQUARE}
-	
-	var obj = [
-		PlayField.new(),
-		Ship.new(),
-		TestSquare.new()
-		]
-	
-	func _init():
-		set_meta("Level", 0)
+		polygon = true
+		
+		pos = _pos
+		vel = _vel
 	
 	func process(delta : float)->void:
-		obj[SHIP].process(delta)
+		pos += vel * delta
+
+class Level:
+	var gm : Node2D
+	var obj := {}
+	
+	func _init(_gm : Node2D):
+		obj = {
+			"playfield" : PlayField.new(_gm),
+			"ship" : Ship.new(_gm),
+			"meteors" : [
+				Meteor.new(_gm, Vector2(-100,-100), Vector2.RIGHT * 50),
+				Meteor.new(_gm, Vector2(100,-100), Vector2.RIGHT * 50),
+				Meteor.new(_gm, Vector2(100,100), Vector2.RIGHT * 50),
+				Meteor.new(_gm, Vector2(-100,100), Vector2.RIGHT * 50),
+				],
+			"bullets" : []
+			}
 		
-		obj[PLAYFIELD].warp_object(obj[SHIP])
+		gm = _gm
+	
+	func process(delta : float)->void:
+		obj.ship.process(delta)
+		
+		if obj.ship.spawn_bullet:
+			obj.ship.spawn_bullet = false
+			
+			var bullet := Bullet.new(gm)
+			
+			bullet.pos = obj.ship.get_shape()[0].rotated(obj.ship.rot) + obj.ship.pos
+			bullet.vel = bullet.vel.rotated(obj.ship.rot)
+			#bullet.player = false
+			
+			obj.bullets.append(bullet)
+		
+		if !obj.bullets.empty():
+			var bullet_delete_list = []
+			
+			for i in range(obj.bullets.size()):
+				obj.bullets[i].process(delta)
+				
+				if obj.bullets[i].delete:
+					bullet_delete_list.append(i)
+					break
+				
+				if !obj.meteors.empty() && obj.bullets[i].player:
+					var meteor_delete_list = []
+					
+					for j in range(obj.meteors.size()):
+						if gm.check_point_in_polygon(
+							obj.bullets[i].pos, 
+							obj.meteors[j].get_shape(), 
+							obj.meteors[j].pos, 
+							obj.meteors[j].rot
+							):
+								bullet_delete_list.append(i)
+								meteor_delete_list.append(j)
+					
+					for idx in meteor_delete_list:
+						# TODO: Add spawning smaller meteors
+						obj.meteors.remove(idx)
+				
+				# TODO
+				# if !obj.bullets[i].player:
+				# 	####do collision check w/ player####
+	#				if obj.has("square"):
+	#					if gm.check_point_in_polygon(
+	#						obj.bullets[i].pos, 
+	#						obj.square.get_shape(), 
+	#						obj.square.pos, 
+	#						obj.square.rot
+	#						):
+	#							obj.erase("square")
+			
+			for idx in bullet_delete_list:
+				obj.bullets.remove(idx)
+		
+		if !obj.meteors.empty():
+			for meteor in obj.meteors:
+				meteor.process(delta)
+		
+		obj.playfield.warp_object(obj.ship)
+		
+		if !obj.bullets.empty():
+			for bullet in obj.bullets:
+				obj.playfield.warp_object(bullet)
+		
+		if !obj.meteors.empty():
+			for meteor in obj.meteors:
+				obj.playfield.warp_object(meteor)
+	
+	func draw():
+		obj.ship.draw()
+		
+		if !obj.bullets.empty():
+			for bullet in obj.bullets:
+				bullet.draw()
+		
+		if !obj.meteors.empty():
+			for meteor in obj.meteors:
+				meteor.draw()
+		
+		obj.playfield.draw()
 
 var draw_offset := Vector2(OS.window_size.x / 2, OS.window_size.y / 2)
 var draw_scale := 1.0
@@ -127,31 +311,19 @@ var line_width := 1.0
 var antialiasing := true
 var draw_fill := false
 
-var level := Level.new()
+var level := Level.new(self)
 
 func _ready():
 	get_tree().get_root().connect("size_changed", self, "window_resize")
+	
 
 func _process(delta : float)->void:
 	level.process(delta)
 	
-	for point in level.obj[level.SHIP].pts[0]:
-		if check_point_in_polygon(
-			point.rotated(level.obj[level.SHIP].rot) + level.obj[level.SHIP].pos, 
-			level.obj[level.SQUARE].pts[0], 
-			level.obj[level.SQUARE].pos, 
-			level.obj[level.SQUARE].rot
-			):
-				level.obj[level.SHIP].line = Color(1,0,0)
-				break
-		else:
-			level.obj[level.SHIP].line = Color(1,1,1)
-	
 	update()
 
 func _draw():
-	for obj in level.obj:
-		draw_object(obj)
+	level.draw()
 
 func draw_object(obj : GameObject)->void:
 	for shape in obj.pts:
@@ -162,7 +334,7 @@ func draw_object(obj : GameObject)->void:
 				(point.rotated(obj.rot) + obj.pos) * draw_scale + draw_offset
 			)
 		
-		if draw_fill:
+		if draw_fill && obj.polygon:
 			draw_polygon(draw_shape, [obj.fill])
 		
 		for i in range(draw_shape.size()):
@@ -232,17 +404,17 @@ func check_point_in_polygon(
 		# We check and see how many sides of the polygon intersect with the
 		# raycast
 		for i in range(polygon.size()):
-			var lineB_start : Vector2
-			var lineB_end : Vector2
+			var line_b_start : Vector2
+			var line_b_end : Vector2
 			
 			if i == polygon.size() - 1:
-				lineB_start = polygon[i].rotated(poly_rot) + poly_pos
-				lineB_end = polygon[0].rotated(poly_rot) + poly_pos
+				line_b_start = polygon[i].rotated(poly_rot) + poly_pos
+				line_b_end = polygon[0].rotated(poly_rot) + poly_pos
 			else:
-				lineB_start = polygon[i].rotated(poly_rot) + poly_pos
-				lineB_end = polygon[i + 1].rotated(poly_rot) + poly_pos
+				line_b_start = polygon[i].rotated(poly_rot) + poly_pos
+				line_b_end = polygon[i + 1].rotated(poly_rot) + poly_pos
 			
-			if check_line_intersection(ray, point, lineB_start, lineB_end):
+			if check_line_intersection(ray, point, line_b_start, line_b_end):
 				intersections += 1
 		
 		# If the number of intersections is odd, then the point is inside the
